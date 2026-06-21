@@ -13,13 +13,9 @@ services:
       - prometheus-data:/prometheus
     networks:
       - obs-internal
-    deploy:
-      resources:
-        limits:
-          memory: 768m
-          cpus: "0.5"
-        reservations:
-          memory: 256m
+    cpus: "0.5"
+    mem_limit: 768m
+    mem_reservation: 256m
     <<: *logging
 
   cadvisor:
@@ -32,13 +28,9 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     networks:
       - obs-internal
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.25"
-        reservations:
-          memory: 128m
+    cpus: "0.25"
+    mem_limit: 512m
+    mem_reservation: 128m
     <<: *logging
 
   node-exporter:
@@ -54,13 +46,9 @@ services:
       - --path.rootfs=/rootfs
     networks:
       - obs-internal
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.25"
-        reservations:
-          memory: 64m
+    cpus: "0.25"
+    mem_limit: 256m
+    mem_reservation: 64m
     <<: *logging
 
   loki:
@@ -70,13 +58,9 @@ services:
       - loki-data:/loki
     networks:
       - obs-internal
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
-        reservations:
-          memory: 128m
+    cpus: "0.5"
+    mem_limit: 512m
+    mem_reservation: 128m
     <<: *logging
 
   alloy:
@@ -88,13 +72,9 @@ services:
     networks:
       - obs-internal
       - logging
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.25"
-        reservations:
-          memory: 64m
+    cpus: "0.25"
+    mem_limit: 256m
+    mem_reservation: 64m
     <<: *logging
 
   grafana:
@@ -108,13 +88,9 @@ services:
       - grafana-data:/var/lib/grafana
     networks:
       - obs-internal
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
-        reservations:
-          memory: 128m
+    cpus: "0.5"
+    mem_limit: 512m
+    mem_reservation: 128m
     <<: *logging
 
 networks:
