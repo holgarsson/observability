@@ -1,0 +1,129 @@
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  prometheus:
+    image: ghcr.io/holgarsson/obs-prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - obs-internal
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+          cpus: "0.5"
+        reservations:
+          memory: 256m
+    <<: *logging
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - obs-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.25"
+        reservations:
+          memory: 128m
+    <<: *logging
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+    networks:
+      - obs-internal
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+        reservations:
+          memory: 64m
+    <<: *logging
+
+  loki:
+    image: ghcr.io/holgarsson/obs-loki:latest
+    restart: unless-stopped
+    volumes:
+      - loki-data:/loki
+    networks:
+      - obs-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+        reservations:
+          memory: 128m
+    <<: *logging
+
+  alloy:
+    image: ghcr.io/holgarsson/obs-alloy:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - obs-internal
+      - logging
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+        reservations:
+          memory: 64m
+    <<: *logging
+
+  grafana:
+    image: ghcr.io/holgarsson/obs-grafana:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3033:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - obs-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+        reservations:
+          memory: 128m
+    <<: *logging
+
+networks:
+  obs-internal:
+    driver: bridge
+  logging:
+    external: true
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:
