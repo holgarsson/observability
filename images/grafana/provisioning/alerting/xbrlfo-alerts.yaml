@@ -1,0 +1,234 @@
+apiVersion: 1
+
+# Alert rules for the single-service XbrlFo app, adapted from the Zakk alerting
+# setup. 5xx / latency / liveness use Prometheus (the http_server_request_*
+# OTel metrics the dashboard already relies on) rather than parsing log fields,
+# so they don't depend on app-specific log shapes. The error-log spike uses
+# Loki severity_text, which Serilog -> OTLP populates.
+#
+# service_name label = OTEL_SERVICE_NAME ("xbrlfo"). Latency metric is in
+# SECONDS. Datasource uids (prometheus, loki) match the provisioned datasources.
+
+groups:
+  - orgId: 1
+    name: xbrlfo-alerts
+    folder: XBRL-FO
+    interval: 1m
+    rules:
+
+      # -----------------------------------------------------------------------
+      # Alert 1: Error Log Spike  (Loki)
+      # More than 5 error-level log events in 5 minutes. Suppression: 15m.
+      # -----------------------------------------------------------------------
+      - uid: xbrlfo-error-spike
+        title: Error Log Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              queryType: range
+              expr: |
+                count_over_time(
+                  {service_name="xbrlfo"} | severity_text =~ "Error|ERROR|Fatal|FATAL" [5m]
+                )
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+              refId: C
+              type: classic_conditions
+        # No matching series = no errors / no slow traffic = healthy, not an
+        # alert. (The liveness rule below deliberately uses NoData -> Alerting.)
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: 'Error log spike: more than 5 errors in 5 minutes'
+          description: 'xbrlfo has logged >5 error/fatal events in the last 5 minutes. Open the XbrlFo Overview dashboard and inspect the log stream with trace links.'
+          runbook_url: 'https://xbrl.fo/grafana/d/xbrlfo-overview'
+        labels:
+          severity: warning
+          team: xbrlfo
+        isPaused: false
+        notificationSettings:
+          receiver: Email Alerts
+          groupWait: 30s
+          groupInterval: 15m
+          repeatInterval: 15m
+
+      # -----------------------------------------------------------------------
+      # Alert 2: HTTP 5xx Spike  (Prometheus)
+      # More than 5 server errors in 5 minutes. Suppression: 10m.
+      # -----------------------------------------------------------------------
+      - uid: xbrlfo-http-5xx-spike
+        title: HTTP 5xx Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              instant: true
+              range: false
+              expr: |
+                sum(increase(http_server_request_duration_seconds_count{service_name="xbrlfo",http_response_status_code=~"5.."}[5m])) or vector(0)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+              refId: C
+              type: classic_conditions
+        # No matching series = no errors / no slow traffic = healthy, not an
+        # alert. (The liveness rule below deliberately uses NoData -> Alerting.)
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: 'HTTP 5xx spike: more than 5 server errors in 5 minutes'
+          description: 'xbrlfo returned >5 HTTP 5xx responses in the last 5 minutes. Check the error-rate and status-code panels and the trace-linked log stream.'
+          runbook_url: 'https://xbrl.fo/grafana/d/xbrlfo-overview'
+        labels:
+          severity: critical
+          team: xbrlfo
+        isPaused: false
+        notificationSettings:
+          receiver: Email Alerts
+          groupWait: 30s
+          groupInterval: 10m
+          repeatInterval: 10m
+
+      # -----------------------------------------------------------------------
+      # Alert 3: Slow Request p95  (Prometheus)
+      # p95 request latency above 2s, sustained for 5m. Suppression: 15m.
+      # Metric is in seconds, so the threshold is 2 (not 2000).
+      # -----------------------------------------------------------------------
+      - uid: xbrlfo-slow-request-p95
+        title: Slow Request p95
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              instant: true
+              range: false
+              expr: |
+                histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_name="xbrlfo"}[5m])) by (le))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [2]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+              refId: C
+              type: classic_conditions
+        # No matching series = no errors / no slow traffic = healthy, not an
+        # alert. (The liveness rule below deliberately uses NoData -> Alerting.)
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: 'Slow request p95: request latency stayed above 2 seconds'
+          description: 'HTTP request p95 has exceeded 2 seconds for 5 minutes. Check the latency panel, slow routes, and trace-linked events.'
+          runbook_url: 'https://xbrl.fo/grafana/d/xbrlfo-overview'
+        labels:
+          severity: warning
+          team: xbrlfo
+        isPaused: false
+        notificationSettings:
+          receiver: Email Alerts
+          groupWait: 60s
+          groupInterval: 15m
+          repeatInterval: 15m
+
+      # -----------------------------------------------------------------------
+      # Alert 4: App Not Emitting Telemetry  (Prometheus)
+      # No process metrics from xbrlfo for 5m — app down or OTLP pipeline broken.
+      # Uses a runtime gauge (emitted every export interval regardless of HTTP
+      # traffic), NOT a request metric: this is a low-traffic filing app, so a
+      # request metric would go stale during idle periods and false-positive.
+      # Suppression: 10m.
+      # -----------------------------------------------------------------------
+      - uid: xbrlfo-no-telemetry
+        title: App Not Emitting Telemetry
+        condition: C
+        data:
+          # Heartbeat pattern: query the always-present runtime gauge directly.
+          # Working-set bytes is always > 0, so the `lt 1` condition is never
+          # true while the app emits -> rule stays inactive. When the app stops
+          # (or OTLP breaks), the query returns NoData -> noDataState: Alerting
+          # fires after the `for` window.
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              instant: true
+              range: false
+              expr: |
+                dotnet_process_memory_working_set_bytes{service_name="xbrlfo"}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+              refId: C
+              type: classic_conditions
+        noDataState: Alerting
+        execErrState: OK
+        for: 5m
+        annotations:
+          summary: 'No telemetry from xbrlfo for 5 minutes'
+          description: 'Prometheus has received no http_server_request metrics from xbrlfo for 5 minutes. The app may be down or the OTLP pipeline (app -> alloy -> prometheus) may be broken.'
+          runbook_url: 'https://xbrl.fo/grafana/d/xbrlfo-overview'
+        labels:
+          severity: critical
+          team: xbrlfo
+        isPaused: false
+        notificationSettings:
+          receiver: Email Alerts
+          groupWait: 30s
+          groupInterval: 10m
+          repeatInterval: 10m

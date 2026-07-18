@@ -84,6 +84,18 @@ services:
       - "127.0.0.1:3033:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # Alert notification delivery (provisioned contact point in
+      # images/grafana/provisioning/alerting/contact-points.yaml expands
+      # GRAFANA_ALERT_EMAIL_ADDRESSES; Grafana itself expands the GF_SMTP_*
+      # vars below). SMTP creds reuse the same Hetzner relay the app already
+      # uses for its own transactional email.
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "${GRAFANA_SMTP_HOST}:${GRAFANA_SMTP_PORT}"
+      GF_SMTP_USER: ${GRAFANA_SMTP_USER}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS}
+      GF_SMTP_FROM_NAME: "Ops Alerts"
+      GRAFANA_ALERT_EMAIL_ADDRESSES: xbrl@xbrl.fo
     volumes:
       - grafana-data:/var/lib/grafana
     networks:

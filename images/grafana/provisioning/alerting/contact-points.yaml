@@ -1,0 +1,17 @@
+apiVersion: 1
+
+# Email contact point for XBRL-FO alerts. Delivery uses Grafana's SMTP config
+# (GF_SMTP_*), which the prod obs stack wires to the app's Email__Smtp* secrets.
+# In dev (no SMTP configured) alerts still evaluate; delivery is simply skipped.
+contactPoints:
+  - orgId: 1
+    name: Email Alerts
+    receivers:
+      - uid: email-xbrlfo-alerts
+        type: email
+        settings:
+          # Grafana provisioning expands ${VAR} but NOT bash-style defaults
+          # (${VAR:-x}); the default is supplied by the compose grafana env.
+          addresses: ${GRAFANA_ALERT_EMAIL_ADDRESSES}
+          subject: '[XBRL-FO] {{ template "default.title" . }}'
+        disableResolveMessage: false
