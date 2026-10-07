@@ -1,0 +1,14 @@
+name: Validate Compose
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker-compose.prod.yml config --no-interpolate --no-env-resolution --quiet
