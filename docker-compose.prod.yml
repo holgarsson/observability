@@ -28,8 +28,8 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     networks:
       - obs-internal
-    cpus: "0.25"
-    mem_limit: 512m
+    cpus: "1.0"
+    mem_limit: 1024m
     mem_reservation: 128m
     <<: *logging
 
@@ -73,7 +73,7 @@ services:
       - obs-internal
       - logging
     cpus: "0.25"
-    mem_limit: 256m
+    mem_limit: 512m
     mem_reservation: 64m
     <<: *logging
 
